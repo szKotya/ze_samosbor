@@ -1719,10 +1719,14 @@ Instance.OnScriptInput("SpawnFloor", () => {
 // \/    \/_|_| |_|_| \_____/\___/|___/___/ (_)   \/  \/ \___/|_|  |_| |_| |_|
 
 let WORM_PARTS = []
-let WORM_TARGET = 4;
+let WORM_PARTS_OLD_ORIGIN = []
+let WORM_TARGET = 0;
 let WORM_OLDTARGET = WORM_TARGET;
 let WORM_ANGLE;
 let WORM_DEAD = false;
+let WORM_LERP_VALUE = 0.0;
+let WORM_LERP_SUB = 0.2;
+let WORM_SPEED = 400;
 
 class NAV_POINT_WORM
 {
@@ -1753,9 +1757,7 @@ let NAV_POINT_LIST = [];
 
 Instance.OnScriptInput("WormInit", () => {
     WORM_PARTS = []
-    let WORM_MAIN = Instance.FindEntityByName("Worm_Train_Face")
-    WORM_PARTS.push(WORM_MAIN)
-
+    WORM_PARTS_OLD_ORIGIN = []
     NAV_POINT_LIST = []
     for(let i = 0; i < 17; i++)
     {
@@ -1783,7 +1785,7 @@ Instance.OnScriptInput("WormInit", () => {
                     let target_Angles = Vector3Utils.lookAt(ent_origin, ent2_origin);
                     target_Angles.roll = 0
                     target_Angles.pitch = 0
-                    Instance.Msg(target_Angles)
+
                     if(target_Angles.yaw % 45 != 0)
                     {
                         continue;
@@ -1805,38 +1807,7 @@ Instance.OnScriptInput("WormInit", () => {
             }
         }
     }
-    for(let i = 0; i < NAV_POINT_LIST.length; i++)
-    {
-        let aDir = []
-        
-        for (let j = 0; j < NAV_POINT_LIST[i].parents.length; j++)
-        {
-            let me_Origin = NAV_POINT_LIST[i].origin;
-            let target_Origin = NAV_POINT_LIST[i].parents[j].origin
-            let dir = Vector3Utils.lookAt(me_Origin, target_Origin);
-            
-            let bFind = false;
-            for (let k = 0; k < aDir.length; k++)
-            {
-                if (aDir[k][0] == dir.yaw)
-                {
-                    bFind = true;
-                    break;
-                }
-            }
 
-            if (!bFind)
-            {
-                aDir.push([dir.yaw, NAV_POINT_LIST[i].parents[j]]);
-            }
-        }
-
-        // Продумать проверку
-        for (let k = 0; k < aDir.length; k++)
-        {
-
-        }
-    }
 
     for(let i = 0; i < NAV_POINT_LIST.length; i++)
     {
@@ -1847,13 +1818,41 @@ Instance.OnScriptInput("WormInit", () => {
         }
     }
 
-    const startID = NAVMESH_GetNearestNavPoint({x: 12556, y: 81.851509, z: -15223});
-    WORM_PARTS[0]?.Teleport({position: NAV_POINT_LIST[startID].origin})
+    Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "WormPartInit", delay: 0.05 })
+    const Temp_WORM_PARTS_NAME = ["Temp_Worm_Face", "Temp_Worm_Top", "Temp_Worm_Midle", "Temp_Worm_Small", "Temp_Worm_End"]
+    for (let i = 0; i < Temp_WORM_PARTS_NAME.length; i++)
+    {
+        Instance.EntFireAtName({ name: Temp_WORM_PARTS_NAME[i], input: "ForceSpawn" })
+    }
 })
 
-Instance.OnScriptInput("DebugWorm_00", () => {
-    Instance.Msg(`${WORM_PARTS[0]}`)
-})
+Instance.OnScriptInput("WormPartInit", () => {WormPartInit()})
+function WormPartInit()
+{
+    
+    const WORM_PARTS_NAME = ["Worm_Train_Face", "Worm_Train_Top", "Worm_Train_Midle", "Worm_Train_Small", "Worm_Train_End"]
+    const WORM_MAIN = Instance.FindEntityByName(WORM_PARTS_NAME[WORM_PARTS.length])
+    WORM_PARTS.push(WORM_MAIN)
+
+    const startID = NAVMESH_GetNearestNavPoint({x: 12556, y: 81.851509, z: -15223});
+    let vecOrigin = NAV_POINT_LIST[startID].origin;
+    vecOrigin = {x: vecOrigin.x, y: vecOrigin.y, z: vecOrigin.z - (128 + 128 * WORM_PARTS.length)}
+    WORM_PARTS_OLD_ORIGIN.push(vecOrigin);
+    WORM_MAIN?.Teleport({position: vecOrigin})
+
+    if (WORM_PARTS.length >= WORM_PARTS_NAME.length)
+    {
+        const distance = Vector3Utils.distance(NAV_POINT_LIST[startID].origin, Vector3Utils.add(NAV_POINT_LIST[startID].origin, {x: 0, y: 0, z: -128}));
+        Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "TickMovementWorm", delay: 0.01 })
+        for (let i = 0; i < WORM_PARTS.length; i++)
+        {
+            Instance.Msg(`NAME: ${WORM_PARTS[i].GetEntityName()} + ${startID}`)
+        }
+        return;
+    }
+
+    Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "WormPartInit", delay: 0.05 })
+}
 
 Instance.OnScriptInput("TickMovementWorm", () => {
     if(!WORM_DEAD)
@@ -1866,8 +1865,11 @@ Instance.OnScriptInput("TickMovementWorm", () => {
 		let target_Origin = NAV_POINT_LIST[WORM_TARGET].origin;
         const target_Distance = Vector3Utils.distance(target_Origin, me_Origin);
         let target_Angles = Vector3Utils.lookAt(me_Origin, target_Origin);
-		target_Angles.roll = 0;
-		target_Angles.pitch = 0;
+		// target_Angles.roll = 0;
+		// target_Angles.pitch = 0;
+
+
+        Instance.Msg(`dist: ${target_Distance}`)
         if (target_Distance < 16)
         {
             let iParents = [];
@@ -1888,24 +1890,50 @@ Instance.OnScriptInput("TickMovementWorm", () => {
             {
                 WORM_TARGET = iParents[GetRandomNumber(0, iParents.length-1)];
             }
-            Instance.Msg(`1 ${target_Angles}`);
-            Instance.Msg(`new ${WORM_TARGET}`)
+            const distance = Vector3Utils.distance(NAV_POINT_LIST[WORM_TARGET].origin, NAV_POINT_LIST[WORM_OLDTARGET].origin);
         }
 
 		let Step = 5;
+        
+		// let Step = 50;
 		let qAngles = EulerUtils.rotateTowards(me_Angles, target_Angles, Step)
         
         //Смотрит на цель можно ехать
         if (EulerUtils.equals(qAngles, target_Angles))
         {
-            let next_Origin = Vector3Utils.add(me_Origin, (Vector3Utils.scale(EulerUtils.forward(target_Angles), 4.0)))
-            WORM_HEAD.Teleport({position: next_Origin, angles: qAngles}) 
+            let tDistance = Vector3Utils.distance(target_Origin, me_Origin);
+            let deltaTime = 0.016; // например, 16 мс (частота 60 fps)
+            let t = (WORM_SPEED * deltaTime) / tDistance;
+
+            let next_Origin = Vector3Utils.lerp(me_Origin, target_Origin, t, true); // относительная часть
+            WORM_HEAD.Teleport({position: next_Origin, angles: qAngles})
+            WORM_PARTS_OLD_ORIGIN[0] = me_Origin;
+            // for (let i = 1; i < WORM_PARTS.length; i++)
+            // {
+            //     WORM_PARTS[i].Teleport({position: part_Origin, angles: part_Angles})
+            //     part_Origin = WORM_PARTS[i].GetAbsOrigin();
+            //     part_Angles = WORM_PARTS[i].GetAbsAngles();
+            // }
+
+            for (let i = WORM_PARTS.length - 1; i > 0; i--)
+            {
+                Instance.Msg(`${WORM_PARTS[i].GetEntityName()}`);
+                const currentPos = WORM_PARTS[i].GetAbsOrigin();
+                const targetPos = WORM_PARTS_OLD_ORIGIN[i - 1];
+
+                // tDistance = Vector3Utils.distance(currentPos, targetPos);
+                // t = (WORM_SPEED * deltaTime) / tDistance;
+
+                const newPos = Vector3Utils.lerp(currentPos, targetPos, t, true); // относительная часть
+                WORM_PARTS[i].Teleport({position: newPos, angles: WORM_PARTS[i - 1].GetAbsAngles()});
+                WORM_PARTS_OLD_ORIGIN[i] = newPos;
+            }
         }
 	    else
         {
             WORM_HEAD.Teleport({angles: qAngles})
         }
-        Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "TickMovementWorm", delay: 0.01 })
+        Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "TickMovementWorm", delay: 0.02 })
     }
 })
 
