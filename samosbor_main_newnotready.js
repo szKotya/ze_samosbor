@@ -1726,7 +1726,7 @@ let WORM_ANGLE;
 let WORM_DEAD = false;
 let WORM_LERP_VALUE = 0.0;
 let WORM_LERP_SUB = 0.2;
-let WORM_SPEED = 400;
+let WORM_SPEED = 5.0;
 
 class NAV_POINT_WORM
 {
@@ -1755,6 +1755,19 @@ class NAV_POINT_WORM
 
 let NAV_POINT_LIST = [];
 
+Instance.OnScriptInput("WormTest", () => {WormTest()})
+
+function WormTest()
+{
+    const dTest = {};
+    dTest['123'] = 'sosal'
+    dTest['321'] = 'penis'
+    for (const d in dTest)
+    {
+        Instance.Msg(`is: ${dTest[d]}`)
+    }
+}
+
 Instance.OnScriptInput("WormInit", () => {
     WORM_PARTS = []
     WORM_PARTS_OLD_ORIGIN = []
@@ -1772,66 +1785,230 @@ Instance.OnScriptInput("WormInit", () => {
     {
         Instance.Msg(`NAME: ${NAV_POINT_LIST[i].name} || ORIGIN: ${NAV_POINT_LIST[i].origin.x} ${NAV_POINT_LIST[i].origin.y} ${NAV_POINT_LIST[i].origin.z}`)
     }
+
     for(let i = 0; i < NAV_POINT_LIST.length; i++)
     {
         for(let j = 0; j < NAV_POINT_LIST.length; j++)
         {
-            if(i != j)
+            if(i == j)
             {
-                if(!NAVMESH_NavPointHasParent(i, j))
-                {
-                    let ent_origin = NAV_POINT_LIST[i].origin
-                    let ent2_origin = NAV_POINT_LIST[j].origin
-                    let target_Angles = Vector3Utils.lookAt(ent_origin, ent2_origin);
-                    target_Angles.roll = 0
-                    target_Angles.pitch = 0
-
-                    if(target_Angles.yaw % 45 != 0)
-                    {
-                        continue;
-                    }
-                    let trace_result = Instance.TraceLine({
-                        start: ent_origin,
-                        end: ent2_origin
-                    })
-
-                    if(trace_result.didHit &&
-                    trace_result.hitEntity != undefined &&
-                    trace_result.hitEntity.GetClassName() == "worldent")
-                    {
-                        continue;
-                    }
-                    NAV_POINT_LIST[i].parents.push(j)
-                    NAV_POINT_LIST[j].parents.push(i)
-                }
+                continue;
             }
+
+            if(NAVMESH_NavPointHasParent(i, j) != -1)
+            {
+                continue;
+            }
+
+            const ent_origin = NAV_POINT_LIST[i].origin
+            const ent2_origin = NAV_POINT_LIST[j].origin
+            const target_Angles = Vector3Utils.lookAt(ent_origin, ent2_origin);
+            if(target_Angles.yaw % 45 != 0)
+            {
+                continue;
+            }
+    
+            const trace_result = Instance.TraceLine({
+                start: ent_origin,
+                end: ent2_origin
+            })
+
+            if(trace_result.didHit &&
+            trace_result.hitEntity != undefined &&
+            trace_result.hitEntity.GetClassName() == "worldent")
+            {
+                continue;
+            }
+
+            NAV_POINT_LIST[i].parents.push(j)
+            NAV_POINT_LIST[j].parents.push(i)
         }
     }
 
+
+
+    for (let i = 0; i < NAV_POINT_LIST.length; i++)
+    {
+        // if (i != 0)
+        // {
+        //     return;
+        // }
+
+        const me_Origin = NAV_POINT_LIST[i].origin;
+        let aData = [];
+
+        // Собираем связи в aData
+        for (let j = 0; j < NAV_POINT_LIST[i].parents.length; j++)
+        {
+            const jID = NAV_POINT_LIST[i].parents[j];
+            const jParent_Origin = NAV_POINT_LIST[jID].origin;
+
+            const jParent_Dir = Vector3Utils.directionTowards(me_Origin, jParent_Origin);
+            const jParent_Distance = Vector3Utils.distance(me_Origin, jParent_Origin);
+
+            aData.push({ID: jID, DIR: `${jParent_Dir.x} ${jParent_Dir.y} ${jParent_Dir.z}`, DISTANCE: jParent_Distance});
+        }
+
+
+        let dirGroups = {};
+        
+        for (let j = 0; j < aData.length; j++)
+        {
+            const data = aData[j];
+            Instance.Msg(`123123 ${data.DIR}`)
+            let groupFound = false;
+            for (const dir in dirGroups)
+            {
+                if (data.DIR == dir)
+                {
+                    if (data.DISTANCE < dirGroups[dir].DISTANCE)
+                    {
+                        dirGroups[dir] = data;
+                    }
+                    groupFound = true;
+                    break;
+                }
+            }
+
+            if (!groupFound)
+            {
+                Instance.Msg(`add group ${data.DIR} + ${aData.length}`)
+                dirGroups[data.DIR] = data;
+            }
+        }
+        
+        let aParents = [];
+        for (const dir in dirGroups)
+        {
+            aParents.push(dirGroups[dir].ID);
+            Instance.Msg(`add zxc ${dirGroups[dir].DIR}`)
+        }
+
+        let aRemoveParents = [];
+        for (let j = 0; j < NAV_POINT_LIST[i].parents.length; j++)
+        {
+            let bNotFound = true;
+            for (let k = 0; k < aParents.length; k++)
+            {
+                if (NAV_POINT_LIST[i].parents[j] == aParents[k])
+                {
+                    bNotFound = false;
+                    break;
+                }
+
+            }
+
+            if (bNotFound)
+            {
+                aRemoveParents.push(NAV_POINT_LIST[i].parents[j])
+            }
+        }
+
+        Instance.Msg(`2`)
+        aRemoveParents = aRemoveParents.slice().reverse();
+
+        for (let k = 0; k < aRemoveParents.length; k++)
+        {
+            Instance.Msg(`4: ${NAV_POINT_LIST.length} ${aRemoveParents[k]} ${i} ${k}`)
+            const ID = NAVMESH_NavPointHasParent(aRemoveParents[k], i);
+            if (ID == -1)
+            {
+                return
+            }
+
+            NAV_POINT_LIST[i].parents.splice(aParents[k], 1)
+            NAV_POINT_LIST[aRemoveParents[k]].parents.splice(ID, 1)
+        }
+
+        NAV_POINT_LIST[i].parents = aParents
+        Instance.Msg(`3`)
+
+        // 4 5 3 1
+
+        // if (i == 0)
+        // {
+        //     for (let j = 0; j < aParents.length; j++)
+        //     {
+        //         Instance.Msg(`UI: ${aParents[j]}`)
+        //     }
+        //     for (let j = 0; j < NAV_POINT_LIST[i].parents.length; j++)
+        //     {
+        //         let MODIF = 32*j;
+        //         let start = Vector3Utils.add(NAV_POINT_LIST[i].origin, {x: 0, y:0, z:MODIF})
+        //         let end = Vector3Utils.add(NAV_POINT_LIST[NAV_POINT_LIST[i].parents[j]].origin, {x: 0, y:0, z:MODIF})
+        //         Instance.DebugLine({start:start, end: end, duration: 32, color: {r: 255, g: 0, b: 0}});  
+        //     }
+        //     Instance.DebugSphere({center: NAV_POINT_LIST[i].origin, radius: 15, duration: 32, color: {r: 38, g: 255, b: 0}})
+        // }
+    }
+
+
+    for(let i = 0; i < NAV_POINT_LIST.length; i++)
+    {
+        Instance.Msg(`POINT ${i} ORIGIN ${NAV_POINT_LIST[i].origin.x} ${NAV_POINT_LIST[i].origin.y} ${NAV_POINT_LIST[i].origin.z}`)
+    }
 
     for(let i = 0; i < NAV_POINT_LIST.length; i++)
     {
         for (let j = 0; j < NAV_POINT_LIST[i].parents.length; j++)
         {
-            Instance.DebugSphere({center: NAV_POINT_LIST[i].origin, radius: 15, duration: 15, color: {r: 38, g: 255, b: 0}})
-            Instance.DebugLine({start: NAV_POINT_LIST[i].origin, end: NAV_POINT_LIST[NAV_POINT_LIST[i].parents[j]].origin, duration: 15, color: {r: 255, g: 0, b: 0}});
+            Instance.Msg(`POINT ${i} HAS PARENT ${NAV_POINT_LIST[i].parents[j]}`)
+        }
+    }
+
+    for(let i = 0; i < NAV_POINT_LIST.length; i++)
+    {
+        for (let j = 0; j < NAV_POINT_LIST[i].parents.length; j++)
+        {
+            
+            Instance.DebugSphere({center: NAV_POINT_LIST[i].origin, radius: 15, duration: 32, color: {r: 38, g: 255, b: 0}})
+            let MODIF = 32*i;
+            let start = Vector3Utils.add(NAV_POINT_LIST[i].origin, {x: 0, y:0, z:MODIF})
+            let end = Vector3Utils.add(NAV_POINT_LIST[NAV_POINT_LIST[i].parents[j]].origin, {x: 0, y:0, z:MODIF})
+            Instance.DebugLine({start:start, end: end, duration: 32, color: {r: 255, g: 0, b: 0}});
         }
     }
 
     Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "WormPartInit", delay: 0.05 })
-    const Temp_WORM_PARTS_NAME = ["Temp_Worm_Face", "Temp_Worm_Top", "Temp_Worm_Midle", "Temp_Worm_Small", "Temp_Worm_End"]
-    for (let i = 0; i < Temp_WORM_PARTS_NAME.length; i++)
+
+    const WORM_PARTS_NAME = ["Temp_Worm_Face", "Temp_Worm_Top", "Temp_Worm_Midle", "Temp_Worm_Small", "Temp_Worm_End"]
+    const WORM_PARTS_COUNT = [1, 4, 5, 3, 1];
+    for (let i = 0; i < WORM_PARTS_NAME.length; i++)
     {
-        Instance.EntFireAtName({ name: Temp_WORM_PARTS_NAME[i], input: "ForceSpawn" })
+        const name = WORM_PARTS_NAME[i];
+        const count = WORM_PARTS_COUNT[i];
+        
+        for (let j = 1; j <= count; j++)
+        {
+            Instance.EntFireAtName({ name: name, input: `ForceSpawn` });
+        }
     }
 })
 
 Instance.OnScriptInput("WormPartInit", () => {WormPartInit()})
 function WormPartInit()
 {
-    
     const WORM_PARTS_NAME = ["Worm_Train_Face", "Worm_Train_Top", "Worm_Train_Midle", "Worm_Train_Small", "Worm_Train_End"]
-    const WORM_MAIN = Instance.FindEntityByName(WORM_PARTS_NAME[WORM_PARTS.length])
+    const WORM_PARTS_COUNT = [1, 4, 5, 3, 1];
+
+    let szPartSpawn = WORM_PARTS_NAME[0];
+    let iPart = 0;
+    let iMax = 0;
+    for (let i = 0; i < WORM_PARTS_COUNT.length; i++)
+    {
+        iMax += WORM_PARTS_COUNT[i];
+    }
+    for (let i = 0; i < WORM_PARTS_COUNT.length; i++)
+    {
+        iPart += WORM_PARTS_COUNT[i];
+        szPartSpawn = WORM_PARTS_NAME[i];
+        if (WORM_PARTS.length < iPart)
+        {
+            break;
+        }
+    }
+
+    const WORM_MAIN = Instance.FindEntityByName(szPartSpawn)
     WORM_PARTS.push(WORM_MAIN)
 
     const startID = NAVMESH_GetNearestNavPoint({x: 12556, y: 81.851509, z: -15223});
@@ -1840,17 +2017,13 @@ function WormPartInit()
     WORM_PARTS_OLD_ORIGIN.push(vecOrigin);
     WORM_MAIN?.Teleport({position: vecOrigin})
 
-    if (WORM_PARTS.length >= WORM_PARTS_NAME.length)
+    Instance.Msg(`SIZE: ${WORM_PARTS.length} Part:${iPart} Name:${szPartSpawn}`)
+    if (WORM_PARTS.length >= iMax)
     {
-        const distance = Vector3Utils.distance(NAV_POINT_LIST[startID].origin, Vector3Utils.add(NAV_POINT_LIST[startID].origin, {x: 0, y: 0, z: -128}));
         Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "TickMovementWorm", delay: 0.01 })
-        for (let i = 0; i < WORM_PARTS.length; i++)
-        {
-            Instance.Msg(`NAME: ${WORM_PARTS[i].GetEntityName()} + ${startID}`)
-        }
         return;
     }
-
+    WORM_MAIN?.SetEntityName("Worm_Train_" + (WORM_PARTS.length - 1));
     Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "WormPartInit", delay: 0.05 })
 }
 
@@ -1868,9 +2041,7 @@ Instance.OnScriptInput("TickMovementWorm", () => {
 		// target_Angles.roll = 0;
 		// target_Angles.pitch = 0;
 
-
-        Instance.Msg(`dist: ${target_Distance}`)
-        if (target_Distance < 16)
+        if (target_Distance < 32)
         {
             let iParents = [];
             for (let i = 0; i < NAV_POINT_LIST[WORM_TARGET].parents.length; i++)
@@ -1893,46 +2064,27 @@ Instance.OnScriptInput("TickMovementWorm", () => {
             const distance = Vector3Utils.distance(NAV_POINT_LIST[WORM_TARGET].origin, NAV_POINT_LIST[WORM_OLDTARGET].origin);
         }
 
-		let Step = 5;
-        
-		// let Step = 50;
+		let Step = 20;
 		let qAngles = EulerUtils.rotateTowards(me_Angles, target_Angles, Step)
         
-        //Смотрит на цель можно ехать
-        if (EulerUtils.equals(qAngles, target_Angles))
+        let n_Origin = Vector3Utils.add(me_Origin, (Vector3Utils.scale(EulerUtils.forward(target_Angles), 96.0)))
+        let deltaTime = 0.016; // например, 16 мс (частота 60 fps)
+        let t = deltaTime * WORM_SPEED;
+        
+        let next_Origin = Vector3Utils.lerp(me_Origin, n_Origin, t, true); // относительная часть
+        WORM_HEAD.Teleport({position: next_Origin, angles: qAngles})
+        WORM_PARTS_OLD_ORIGIN[0] = me_Origin;
+
+        for (let i = WORM_PARTS.length - 1; i > 0; i--)
         {
-            let tDistance = Vector3Utils.distance(target_Origin, me_Origin);
-            let deltaTime = 0.016; // например, 16 мс (частота 60 fps)
-            let t = (WORM_SPEED * deltaTime) / tDistance;
+            const currentPos = WORM_PARTS[i].GetAbsOrigin();
+            const targetPos = WORM_PARTS_OLD_ORIGIN[i - 1];
 
-            let next_Origin = Vector3Utils.lerp(me_Origin, target_Origin, t, true); // относительная часть
-            WORM_HEAD.Teleport({position: next_Origin, angles: qAngles})
-            WORM_PARTS_OLD_ORIGIN[0] = me_Origin;
-            // for (let i = 1; i < WORM_PARTS.length; i++)
-            // {
-            //     WORM_PARTS[i].Teleport({position: part_Origin, angles: part_Angles})
-            //     part_Origin = WORM_PARTS[i].GetAbsOrigin();
-            //     part_Angles = WORM_PARTS[i].GetAbsAngles();
-            // }
-
-            for (let i = WORM_PARTS.length - 1; i > 0; i--)
-            {
-                Instance.Msg(`${WORM_PARTS[i].GetEntityName()}`);
-                const currentPos = WORM_PARTS[i].GetAbsOrigin();
-                const targetPos = WORM_PARTS_OLD_ORIGIN[i - 1];
-
-                // tDistance = Vector3Utils.distance(currentPos, targetPos);
-                // t = (WORM_SPEED * deltaTime) / tDistance;
-
-                const newPos = Vector3Utils.lerp(currentPos, targetPos, t, true); // относительная часть
-                WORM_PARTS[i].Teleport({position: newPos, angles: WORM_PARTS[i - 1].GetAbsAngles()});
-                WORM_PARTS_OLD_ORIGIN[i] = newPos;
-            }
+            const newPos = Vector3Utils.lerp(currentPos, targetPos, t, true); // относительная часть
+            WORM_PARTS[i].Teleport({position: newPos, angles: WORM_PARTS[i - 1].GetAbsAngles()});
+            WORM_PARTS_OLD_ORIGIN[i] = newPos;
         }
-	    else
-        {
-            WORM_HEAD.Teleport({angles: qAngles})
-        }
+
         Instance.EntFireAtName({ name: "Map_Script_Main", input: "RunScriptInput", value: "TickMovementWorm", delay: 0.02 })
     }
 })
@@ -1976,11 +2128,11 @@ function NAVMESH_NavPointHasParent(ID_00, ID_01)
 	{
 		if (NAV_POINT_LIST[ID_00].parents[i] == ID_01)
 		{
-			return true;
+			return i;
 		}
 	}
 
-	return false;
+	return -1;
 }
 
 function NAVMESH_GetNearestNavPoint(vecOrigin)
